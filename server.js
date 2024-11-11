@@ -1,52 +1,77 @@
 const express = require('express');
 const WebSocket = require('ws');
+const multer = require('multer');
 const path = require('path');
+const url = require('url');
 
 const app = express();
 const PORT = 3000;
 
-// Serve static files from the "public" directory
-app.use(express.static(path.join(__dirname, 'public')));
+// Set up storage for uploaded files
+const storage = multer.diskStorage({
+  destination: 'public/uploads',
+  filename: (req, file, cb) => {
+    cb(null, 'uploaded_pdf.pdf'); // Always overwrite with the same filename
+  }
+});
+const upload = multer({ storage });
 
-// Start HTTP server
-const server = app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Serve static files
+app.use(express.static('public'));
+
+// PDF upload endpoint
+app.post('/upload', upload.single('pdf'), (req, res) => {
+  res.json({ filePath: `/uploads/${req.file.filename}` });
 });
 
-// Initialize WebSocket server
+// WebSocket server setup
+const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 const wss = new WebSocket.Server({ server });
 
-// Track the current page
 let currentPage = 1;
+let currentFilePath = `/uploads/uploaded_pdf.pdf`; // Default file path
 
-// Handle WebSocket connections
-wss.on('connection', (ws) => {
-  console.log('New client connected');
+// WebSocket connection handling
+wss.on('connection', (ws, req) => {
+  // Extract role from query parameters
+  const queryParams = url.parse(req.url, true).query;
+  const role = queryParams.role === 'admin' ? 'admin' : 'user';
 
-  // Send the current page to the newly connected client
+  // Send the current file path and page to the new connection
+  ws.send(JSON.stringify({ type: 'newFile', filePath: currentFilePath }));
   ws.send(JSON.stringify({ type: 'page', page: currentPage }));
 
-  // Listen for messages from clients
   ws.on('message', (message) => {
     const data = JSON.parse(message);
 
-    // Handle page change message from admin
     if (data.type === 'changePage') {
-      currentPage = data.page; // Update the current page number
+      currentPage = data.page;
+      
+      // Log the slide being broadcasted
+      console.log(`Broadcasting slide change to page ${currentPage}`);
 
-      // Broadcast the page change to all connected clients
+      // Broadcast the page change to all clients
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ type: 'page', page: currentPage }));
         }
       });
+    } else if (data.type === 'newFile') {
+      currentFilePath = data.filePath;
 
-      console.log(`Page changed to ${currentPage}, broadcasted to all clients`);
+      // Log the new file upload event
+      console.log(`New PDF file uploaded by ${role}, broadcasting file path ${currentFilePath}`);
+
+      // Broadcast the new file path to all clients
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'newFile', filePath: currentFilePath }));
+        }
+      });
     }
   });
 
-  // Handle client disconnects
   ws.on('close', () => {
-    console.log('Client disconnected');
+    console.log(`${role} disconnected.`);
   });
 });
