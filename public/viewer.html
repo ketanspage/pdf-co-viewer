@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Viewer (Tailwind Styled)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.6.172/pdf.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+  <!-- Container for the PDF Viewer -->
+  <div class="w-full max-w-3xl p-4 bg-white rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold text-gray-800 text-center mb-4">PDF Co-Viewer</h2>
+
+    <!-- Page Navigation Buttons -->
+    <div class="flex justify-between items-center mb-4">
+      <button id="prevPage" style="display:none" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Previous</button>
+      <p class="text-gray-700">Current Page: <span id="pageNum" class="font-semibold text-gray-900">1</span> / <span id="totalPages" class="font-semibold text-gray-900"></span></p>
+      <button id="nextPage" style="display:none" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Next</button>
+    </div>
+
+    <!-- Canvas for rendering the PDF -->
+    <div class="border border-gray-300 rounded overflow-hidden">
+      <canvas id="pdfCanvas" class="w-full"></canvas>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', () => {
+      // PDF.js worker setup
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.6.172/pdf.worker.min.js';
+
+      const url = 'http://localhost:3000/picam-21BPS1628.pdf';
+      const urlParams = new URLSearchParams(window.location.search);
+      const role = urlParams.get('role');
+      
+      const ws = new WebSocket('ws://localhost:3000');
+      let pdfDoc = null;
+      let pageNum = 1;
+      const canvas = document.getElementById('pdfCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Track the current render task to prevent overlap
+      let currentRenderTask = null;
+
+      // Enforced rotation for all views
+      const enforcedRotation = role === 'admin' ? 0 : null;  // Enforce 0 for admin, null for user
+
+      // Render PDF page with render task handling
+      async function renderPage(num) {
+        console.log(`Rendering page ${num} for role: ${role}`);
+        try {
+          const page = await pdfDoc.getPage(num);
+
+          // Cancel any ongoing render task to prevent conflicts
+          if (currentRenderTask) {
+            currentRenderTask.cancel();
+          }
+
+          // Retrieve and log rotation info
+          let rotation = enforcedRotation !== null ? enforcedRotation : page.rotate || 0;
+          console.log(`Page rotation from metadata: ${page.rotate}, enforced rotation: ${enforcedRotation}`);
+          console.log(`Final rotation applied: ${rotation}`);
+
+          // Clear the canvas to reset prior transformations
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          canvas.width = 0;
+          canvas.height = 0;
+
+          // Set up viewport with applied rotation and scale
+          const viewport = page.getViewport({ scale: 1.5, rotation: rotation });
+          console.log(`Viewport dimensions: width=${viewport.width}, height=${viewport.height}, rotation=${rotation}`);
+          
+          // Adjust canvas dimensions to match the viewport
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          // Start a new render task and keep track of it
+          const renderContext = { canvasContext: ctx, viewport: viewport };
+          currentRenderTask = page.render(renderContext);
+          await currentRenderTask.promise;
+          document.getElementById('pageNum').textContent = num;
+          console.log(`Page ${num} rendered with rotation: ${rotation}`);
+        } catch (error) {
+          if (error.name === 'RenderingCancelledException') {
+            console.log("Rendering cancelled to allow a new render task.");
+          } else {
+            console.error("Error rendering page:", error);
+          }
+        }
+      }
+
+      // Load the PDF document
+      pdfjsLib.getDocument(url).promise.then((pdf) => {
+        pdfDoc = pdf;
+        document.getElementById('totalPages').textContent = pdf.numPages;
+        console.log("PDF loaded successfully");
+        renderPage(pageNum);
+      }).catch(error => {
+        console.error("Error loading PDF:", error);
+      });
+
+      // Show navigation controls only if the user is an admin
+      if (role === 'admin') {
+        document.getElementById('prevPage').style.display = 'inline';
+        document.getElementById('nextPage').style.display = 'inline';
+      }
+
+      // Page navigation for admin
+      document.getElementById('nextPage').addEventListener('click', () => {
+        if (role === 'admin' && pageNum < pdfDoc.numPages) {
+          pageNum++;
+          ws.send(JSON.stringify({ type: 'changePage', page: pageNum }));
+          renderPage(pageNum); // Render page locally for admin
+        }
+      });
+
+      document.getElementById('prevPage').addEventListener('click', () => {
+        if (role === 'admin' && pageNum > 1) {
+          pageNum--;
+          ws.send(JSON.stringify({ type: 'changePage', page: pageNum }));
+          renderPage(pageNum); // Render page locally for admin
+        }
+      });
+
+      // WebSocket message handling for page synchronization
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        if (message.type === 'page') {
+          pageNum = message.page;
+          renderPage(pageNum);
+        }
+      };
+
+      ws.onopen = () => console.log("WebSocket connected");
+      ws.onerror = (error) => console.error("WebSocket error:", error);
+      ws.onclose = () => console.log("WebSocket connection closed");
+    });
+  </script>
+</body>
+</html>
