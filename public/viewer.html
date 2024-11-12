@@ -8,32 +8,87 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-  <div class="w-full max-w-3xl p-4 bg-white rounded-lg shadow-md">
-    <h2 class="text-2xl font-bold text-gray-800 text-center mb-4">PDF Co-Viewer</h2>
+<body class="bg-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <div class="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-md">
+      <!-- Header with Title and Logout -->
+      <div class="p-4 border-b border-gray-200">
+        <div class="flex justify-between items-center">
+          <h2 class="text-2xl font-bold text-gray-800">PDF Co-Viewer</h2>
+          <div class="flex items-center gap-4">
+            <span id="connectionStatus" class="text-sm font-medium text-gray-600">
+              Status: <span class="text-green-500">Connected</span>
+            </span>
+            <button id="logoutButton" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors">
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
 
-    <!-- Access Code Display for Admin -->
-    <div id="accessCodeDisplay" style="display: none;" class="mb-4 p-4 bg-green-100 rounded-lg">
-      <p class="text-green-800">Room Access Code: <span id="roomCode" class="font-bold"></span></p>
-    </div>
+      <div class="p-4">
+        <!-- Access Code Display for Admin -->
+        <div id="accessCodeDisplay" style="display: none;" class="mb-4 p-4 bg-green-100 rounded-lg">
+          <p class="text-green-800">Room Access Code: <span id="roomCode" class="font-bold"></span></p>
+          <p class="text-sm text-green-600 mt-1">Share this code with viewers to join the session</p>
+        </div>
 
-    <!-- PDF Upload for Admins Only -->
-    <div id="uploadSection" style="display: none;" class="mb-4">
-      <label class="block text-gray-700 font-semibold mb-2">Upload PDF:</label>
-      <input type="file" id="pdfUpload" accept="application/pdf" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
-      <button id="uploadButton" class="mt-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600">Upload PDF</button>
-    </div>
+        <!-- Session Info -->
+        <div id="sessionInfo" class="mb-4 p-4 bg-blue-50 rounded-lg">
+          <p class="text-blue-800">
+            Role: <span id="userRole" class="font-bold"></span>
+          </p>
+        </div>
 
-    <!-- Page Navigation and Viewer -->
-    <div class="flex justify-between items-center mb-4">
-      <button id="prevPage" style="display:none" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Previous</button>
-      <p class="text-gray-700">Current Page: <span id="pageNum" class="font-semibold text-gray-900">1</span> / <span id="totalPages" class="font-semibold text-gray-900"></span></p>
-      <button id="nextPage" style="display:none" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">Next</button>
-    </div>
+        <!-- PDF Upload for Admins Only -->
+        <div id="uploadSection" style="display: none;" class="mb-6">
+          <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <label class="block text-gray-700 font-semibold mb-2">Upload PDF:</label>
+            <input type="file" id="pdfUpload" accept="application/pdf" 
+              class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 
+              file:rounded-lg file:border-0 file:text-sm file:font-semibold 
+              file:bg-blue-500 file:text-white hover:file:bg-blue-600 
+              cursor-pointer focus:outline-none">
+            <button id="uploadButton" 
+              class="mt-3 px-4 py-2 bg-green-500 text-white rounded-lg 
+              hover:bg-green-600 focus:outline-none focus:ring-2 
+              focus:ring-green-500 transition-colors">
+              Upload PDF
+            </button>
+          </div>
+        </div>
 
-    <!-- Canvas for rendering the PDF -->
-    <div class="border border-gray-300 rounded overflow-hidden">
-      <canvas id="pdfCanvas" class="w-full"></canvas>
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" style="display: none;" 
+          class="mb-4 p-4 bg-yellow-50 rounded-lg text-center">
+          <p class="text-yellow-600">Loading PDF...</p>
+        </div>
+
+        <!-- Page Navigation -->
+        <div class="flex justify-between items-center mb-4">
+          <button id="prevPage" style="display:none" 
+            class="px-4 py-2 bg-blue-500 text-white rounded-lg 
+            hover:bg-blue-600 focus:outline-none focus:ring-2 
+            focus:ring-blue-500 transition-colors">
+            Previous
+          </button>
+          <p class="text-gray-700">
+            Page <span id="pageNum" class="font-semibold text-gray-900">1</span> 
+            of <span id="totalPages" class="font-semibold text-gray-900"></span>
+          </p>
+          <button id="nextPage" style="display:none" 
+            class="px-4 py-2 bg-blue-500 text-white rounded-lg 
+            hover:bg-blue-600 focus:outline-none focus:ring-2 
+            focus:ring-blue-500 transition-colors">
+            Next
+          </button>
+        </div>
+
+        <!-- PDF Viewer -->
+        <div class="border border-gray-300 rounded-lg overflow-hidden bg-gray-50">
+          <canvas id="pdfCanvas" class="w-full"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -45,13 +100,36 @@
       const role = urlParams.get('role');
       const accessCode = urlParams.get('accessCode');
 
+      // Update UI with role
+      document.getElementById('userRole').textContent = role.charAt(0).toUpperCase() + role.slice(1);
+
       // Initialize Socket.IO
       const socket = io('http://localhost:3000');
       let pdfDoc = null;
       let pageNum = 1;
+      let currentRoom = null;
       const canvas = document.getElementById('pdfCanvas');
       const ctx = canvas.getContext('2d');
       let currentRenderTask = null;
+
+      // Loading indicator functions
+      const showLoading = () => {
+        document.getElementById('loadingIndicator').style.display = 'block';
+      };
+      const hideLoading = () => {
+        document.getElementById('loadingIndicator').style.display = 'none';
+      };
+
+      // Connection status handling
+      socket.on('connect', () => {
+        document.getElementById('connectionStatus').innerHTML = 
+          'Status: <span class="text-green-500">Connected</span>';
+      });
+
+      socket.on('disconnect', () => {
+        document.getElementById('connectionStatus').innerHTML = 
+          'Status: <span class="text-red-500">Disconnected</span>';
+      });
 
       // Handle room joining
       if (role === 'admin') {
@@ -62,10 +140,12 @@
         document.getElementById('nextPage').style.display = 'inline-block';
       } else if (role === 'user' && accessCode) {
         socket.emit('joinRoom', accessCode);
+        currentRoom = accessCode;
       }
 
       // Handle room creation response
       socket.on('roomCreated', (roomCode) => {
+        currentRoom = roomCode;
         document.getElementById('roomCode').textContent = roomCode;
       });
 
@@ -75,10 +155,29 @@
         window.location.href = 'index.html';
       });
 
+      // Handle admin logout event for users
+      socket.on('adminLoggedOut', () => {
+        alert('The admin has ended the session.');
+        window.location.href = 'index.html';
+      });
+
+      // Handle session timeout
+      socket.on('sessionTimeout', () => {
+        alert('Session timed out due to inactivity.');
+        window.location.href = 'index.html';
+      });
+
+      // Upload handling
       document.getElementById('uploadButton').addEventListener('click', () => {
         const fileInput = document.getElementById('pdfUpload');
         if (fileInput.files.length > 0) {
           const file = fileInput.files[0];
+          if (file.size > 10 * 1024 * 1024) { // 10MB limit
+            alert('File size must be less than 10MB');
+            return;
+          }
+
+          showLoading();
           const formData = new FormData();
           formData.append('pdf', file);
 
@@ -93,7 +192,13 @@
               loadPDF(data.filePath);
             }
           })
-          .catch(error => console.error("Error uploading file:", error));
+          .catch(error => {
+            console.error("Error uploading file:", error);
+            alert('Error uploading file. Please try again.');
+          })
+          .finally(() => {
+            hideLoading();
+          });
         }
       });
 
@@ -104,38 +209,56 @@
           currentRenderTask.cancel();
         }
 
-        const page = await pdfDoc.getPage(num);
-        const rotation = page.rotate || 0;
-        const viewport = page.getViewport({ scale: 1.5, rotation: rotation });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        const renderContext = { canvasContext: ctx, viewport: viewport };
-        currentRenderTask = page.render(renderContext);
+        showLoading();
 
         try {
+          const page = await pdfDoc.getPage(num);
+          const rotation = page.rotate || 0;
+          const scale = Math.min(
+            window.innerWidth / page.getViewport({ scale: 1 }).width,
+            1.5
+          );
+          const viewport = page.getViewport({ scale, rotation });
+
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          const renderContext = { canvasContext: ctx, viewport: viewport };
+          currentRenderTask = page.render(renderContext);
+
           await currentRenderTask.promise;
           document.getElementById('pageNum').textContent = num;
         } catch (error) {
           if (error.name !== 'RenderingCancelledException') {
             console.error("Error rendering page:", error);
           }
+        } finally {
+          hideLoading();
         }
       }
 
       function loadPDF(filePath) {
-        pdfjsLib.getDocument(filePath).promise.then((pdf) => {
-          pdfDoc = pdf;
-          pageNum = 1;
-          document.getElementById('totalPages').textContent = pdf.numPages;
-          renderPage(pageNum);
-        }).catch(error => console.error("Error loading PDF:", error));
+        showLoading();
+        pdfjsLib.getDocument(filePath).promise
+          .then((pdf) => {
+            pdfDoc = pdf;
+            pageNum = 1;
+            document.getElementById('totalPages').textContent = pdf.numPages;
+            return renderPage(pageNum);
+          })
+          .catch(error => {
+            console.error("Error loading PDF:", error);
+            alert('Error loading PDF. Please try again.');
+          })
+          .finally(() => {
+            hideLoading();
+          });
       }
 
+      // Socket events
       socket.on('pageChange', (page) => {
         pageNum = page;
         renderPage(pageNum);
@@ -145,6 +268,7 @@
         loadPDF(data.filePath);
       });
 
+      // Navigation handlers
       document.getElementById('nextPage').addEventListener('click', () => {
         if (role === 'admin' && pdfDoc && pageNum < pdfDoc.numPages) {
           pageNum++;
@@ -159,6 +283,27 @@
           socket.emit('changePage', pageNum);
           renderPage(pageNum);
         }
+      });
+
+      // Logout handling
+      document.getElementById('logoutButton').addEventListener('click', () => {
+        if (role === 'admin') {
+          socket.emit('adminLogout', currentRoom);
+        } else {
+          socket.emit('userLogout', currentRoom);
+        }
+        window.location.href = 'index.html';
+      });
+
+      // Window resize handling
+      let resizeTimeout;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          if (pdfDoc) {
+            renderPage(pageNum);
+          }
+        }, 100);
       });
     });
   </script>
