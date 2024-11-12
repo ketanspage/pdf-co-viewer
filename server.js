@@ -1,17 +1,25 @@
 const express = require('express');
-const WebSocket = require('ws');
+const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
-const url = require('url');
+const http = require('http');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = 3000;
 
-// Set up storage for uploaded files
+// Storage configuration for uploaded files
 const storage = multer.diskStorage({
   destination: 'public/uploads',
   filename: (req, file, cb) => {
-    cb(null, 'uploaded_pdf.pdf'); // Always overwrite with the same filename
+    cb(null, 'uploaded_pdf.pdf');
   }
 });
 const upload = multer({ storage });
@@ -24,54 +32,73 @@ app.post('/upload', upload.single('pdf'), (req, res) => {
   res.json({ filePath: `/uploads/${req.file.filename}` });
 });
 
-// WebSocket server setup
-const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
-const wss = new WebSocket.Server({ server });
+// Store room information
+const rooms = new Map();
 
-let currentPage = 1;
-let currentFilePath = `/uploads/uploaded_pdf.pdf`; // Default file path
+// Generate random 6-digit room code
+function generateRoomCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
-// WebSocket connection handling
-wss.on('connection', (ws, req) => {
-  // Extract role from query parameters
-  const queryParams = url.parse(req.url, true).query;
-  const role = queryParams.role === 'admin' ? 'admin' : 'user';
+io.on('connection', (socket) => {
+  let currentRoom = null;
 
-  // Send the current file path and page to the new connection
-  ws.send(JSON.stringify({ type: 'newFile', filePath: currentFilePath }));
-  ws.send(JSON.stringify({ type: 'page', page: currentPage }));
+  socket.on('createRoom', () => {
+    const roomCode = generateRoomCode();
+    currentRoom = roomCode;
+    socket.join(roomCode);
+    rooms.set(roomCode, {
+      admin: socket.id,
+      currentPage: 1,
+      currentFile: null
+    });
+    socket.emit('roomCreated', roomCode);
+  });
 
-  ws.on('message', (message) => {
-    const data = JSON.parse(message);
-
-    if (data.type === 'changePage') {
-      currentPage = data.page;
-      
-      // Log the slide being broadcasted
-      console.log(`Broadcasting slide change to page ${currentPage}`);
-
-      // Broadcast the page change to all clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'page', page: currentPage }));
-        }
-      });
-    } else if (data.type === 'newFile') {
-      currentFilePath = data.filePath;
-
-      // Log the new file upload event
-      console.log(`New PDF file uploaded by ${role}, broadcasting file path ${currentFilePath}`);
-
-      // Broadcast the new file path to all clients
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'newFile', filePath: currentFilePath }));
-        }
-      });
+  socket.on('joinRoom', (roomCode) => {
+    if (rooms.has(roomCode)) {
+      currentRoom = roomCode;
+      socket.join(roomCode);
+      const roomData = rooms.get(roomCode);
+      if (roomData.currentFile) {
+        socket.emit('newPDF', { filePath: roomData.currentFile });
+        socket.emit('pageChange', roomData.currentPage);
+      }
+    } else {
+      socket.emit('joinError', 'Invalid access code');
     }
   });
 
-  ws.on('close', () => {
-    console.log(`${role} disconnected.`);
+  socket.on('changePage', (page) => {
+    if (currentRoom && rooms.has(currentRoom)) {
+      const roomData = rooms.get(currentRoom);
+      if (socket.id === roomData.admin) {
+        roomData.currentPage = page;
+        io.to(currentRoom).emit('pageChange', page);
+      }
+    }
+  });
+
+  socket.on('newFile', (data) => {
+    if (currentRoom && rooms.has(currentRoom)) {
+      const roomData = rooms.get(currentRoom);
+      if (socket.id === roomData.admin) {
+        roomData.currentFile = data.filePath;
+        io.to(currentRoom).emit('newPDF', data);
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (currentRoom) {
+      const roomData = rooms.get(currentRoom);
+      if (roomData && roomData.admin === socket.id) {
+        // If admin disconnects, clean up the room
+        io.to(currentRoom).emit('adminLeft');
+        rooms.delete(currentRoom);
+      }
+    }
   });
 });
+
+server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
