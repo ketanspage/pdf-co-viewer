@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Co-Viewer Login</title>
+  <title>PDF Co-Viewer: Login</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
@@ -17,8 +17,6 @@
           <option value="user">User</option>
         </select>
       </div>
-
-      <!-- Access Code Input (shown only for users) -->
       <div id="accessCodeContainer" style="display: none;">
         <label for="accessCode" class="block text-gray-700 font-semibold mb-2">Access Code:</label>
         <input type="text" id="accessCode" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter access code">
@@ -34,8 +32,6 @@
     const accessCodeContainer = document.getElementById('accessCodeContainer');
     const loginForm = document.getElementById('loginForm');
     const messageDiv = document.getElementById('message');
-
-    // Show/hide access code input based on role selection
     roleSelect.addEventListener('change', function() {
       accessCodeContainer.style.display = this.value === 'user' ? 'block' : 'none';
     });
@@ -49,8 +45,6 @@
         messageDiv.textContent = 'Please enter an access code';
         return;
       }
-
-      // Redirect to viewer with role and access code (if applicable)
       const params = new URLSearchParams();
       params.append('role', role);
       if (accessCode) params.append('accessCode', accessCode);

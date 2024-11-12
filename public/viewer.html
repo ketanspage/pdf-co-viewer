@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Viewer (Admin Upload)</title>
+  <title>PDF Co-Viewer</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
@@ -95,15 +95,10 @@
   <script>
     window.addEventListener('load', () => {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
-
       const urlParams = new URLSearchParams(window.location.search);
       const role = urlParams.get('role');
       const accessCode = urlParams.get('accessCode');
-
-      // Update UI with role
       document.getElementById('userRole').textContent = role.charAt(0).toUpperCase() + role.slice(1);
-
-      // Initialize Socket.IO
       const socket = io('https://pdf-co-viewer.onrender.com');
       let pdfDoc = null;
       let pageNum = 1;

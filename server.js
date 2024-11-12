@@ -1,9 +1,10 @@
-const express = require('express');
-const { Server } = require('socket.io');
-const multer = require('multer');
-const path = require('path');
-const http = require('http');
-const fs = require('fs');
+import express from 'express';
+import { Server } from 'socket.io';
+import multer from 'multer';
+import path from 'path';
+import http from 'http';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const server = http.createServer(app);
@@ -17,6 +18,9 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 // Create uploads directory if it doesn't exist
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const uploadDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -24,34 +28,23 @@ if (!fs.existsSync(uploadDir)) {
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    // Generate unique filename with timestamp
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
     cb(null, `pdf-${uniqueSuffix}${path.extname(file.originalname)}`);
   }
 });
 
-// File filter to only allow PDFs
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === 'application/pdf') {
-    cb(null, true);
-  } else {
-    cb(new Error('Only PDF files are allowed'), false);
-  }
+  file.mimetype === 'application/pdf' ? cb(null, true) : cb(new Error('Only PDF files are allowed'), false);
 };
 
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  }
+  storage,
+  fileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-// Serve static files
 app.use(express.static('public'));
 
 // Error handling middleware
@@ -65,94 +58,69 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// PDF upload endpoint
 app.post('/upload', upload.single('pdf'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
-  }
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ 
     filePath: `/uploads/${req.file.filename}`,
     fileName: req.file.filename
   });
 });
 
-// Store room information
 const rooms = new Map();
 const roomTimeouts = new Map();
 const userTimeouts = new Map();
 
-// Configuration
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-const INACTIVE_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+const SESSION_TIMEOUT = 30 * 60 * 1000;
+const INACTIVE_TIMEOUT = 15 * 60 * 1000;
 
-// Generate random 6-digit room code
-function generateRoomCode() {
+const generateRoomCode = () => {
   let code;
   do {
     code = Math.floor(100000 + Math.random() * 900000).toString();
   } while (rooms.has(code));
   return code;
-}
+};
 
-// Clean up files for a room
-function cleanupRoomFiles(roomCode) {
+const cleanupRoomFiles = (roomCode) => {
   const roomData = rooms.get(roomCode);
-  if (roomData && roomData.files && roomData.files.length > 0) {
+  if (roomData?.files.length > 0) {
     roomData.files.forEach(file => {
       const filePath = path.join(uploadDir, file);
-      fs.unlink(filePath, (err) => {
-        if (err && err.code !== 'ENOENT') {
-          console.error(`Error deleting file ${file}:`, err);
-        }
+      fs.unlink(filePath, err => {
+        if (err && err.code !== 'ENOENT') console.error(`Error deleting file ${file}:`, err);
       });
     });
   }
-}
+};
 
-// Clean up room and associated resources
-function cleanupRoom(roomCode) {
+const cleanupRoom = (roomCode) => {
   cleanupRoomFiles(roomCode);
-  
-  // Clear all timeouts associated with the room
-  if (roomTimeouts.has(roomCode)) {
-    clearTimeout(roomTimeouts.get(roomCode));
-    roomTimeouts.delete(roomCode);
-  }
+  clearTimeout(roomTimeouts.get(roomCode));
+  roomTimeouts.delete(roomCode);
 
-  // Clear user timeouts for all users in the room
   const roomData = rooms.get(roomCode);
-  if (roomData && roomData.users) {
+  if (roomData?.users) {
     roomData.users.forEach(userId => {
-      if (userTimeouts.has(userId)) {
-        clearTimeout(userTimeouts.get(userId));
-        userTimeouts.delete(userId);
-      }
+      clearTimeout(userTimeouts.get(userId));
+      userTimeouts.delete(userId);
     });
   }
 
   rooms.delete(roomCode);
-}
+};
 
-// Reset room timeout
-function resetRoomTimeout(roomCode) {
-  if (roomTimeouts.has(roomCode)) {
-    clearTimeout(roomTimeouts.get(roomCode));
-  }
-
+const resetRoomTimeout = (roomCode) => {
+  clearTimeout(roomTimeouts.get(roomCode));
   const timeout = setTimeout(() => {
     io.to(roomCode).emit('sessionTimeout');
     cleanupRoom(roomCode);
   }, SESSION_TIMEOUT);
 
   roomTimeouts.set(roomCode, timeout);
-}
+};
 
-// Reset user timeout
-function resetUserTimeout(userId, roomCode) {
-  if (userTimeouts.has(userId)) {
-    clearTimeout(userTimeouts.get(userId));
-  }
-
+const resetUserTimeout = (userId, roomCode) => {
+  clearTimeout(userTimeouts.get(userId));
   const timeout = setTimeout(() => {
     const socket = io.sockets.sockets.get(userId);
     if (socket) {
@@ -162,7 +130,7 @@ function resetUserTimeout(userId, roomCode) {
   }, INACTIVE_TIMEOUT);
 
   userTimeouts.set(userId, timeout);
-}
+};
 
 io.on('connection', (socket) => {
   let currentRoom = null;
@@ -197,7 +165,6 @@ io.on('connection', (socket) => {
       resetRoomTimeout(roomCode);
       resetUserTimeout(socket.id, roomCode);
 
-      // Send current state to new user
       if (roomData.currentFile) {
         socket.emit('newPDF', { filePath: roomData.currentFile });
         socket.emit('pageChange', roomData.currentPage);
@@ -222,10 +189,8 @@ io.on('connection', (socket) => {
     if (currentRoom && rooms.has(currentRoom)) {
       const roomData = rooms.get(currentRoom);
       if (socket.id === roomData.admin) {
-        // Extract filename from filepath
         const filename = path.basename(data.filePath);
         
-        // Add to room's file list
         roomData.files.push(filename);
         roomData.currentFile = data.filePath;
         
@@ -245,14 +210,10 @@ io.on('connection', (socket) => {
   socket.on('userLogout', (roomCode) => {
     if (rooms.has(roomCode)) {
       const roomData = rooms.get(roomCode);
-      if (roomData.users.has(socket.id)) {
-        roomData.users.delete(socket.id);
-        if (userTimeouts.has(socket.id)) {
-          clearTimeout(userTimeouts.get(socket.id));
-          userTimeouts.delete(socket.id);
-        }
-        socket.leave(roomCode);
-      }
+      roomData.users.delete(socket.id);
+      clearTimeout(userTimeouts.get(socket.id));
+      userTimeouts.delete(socket.id);
+      socket.leave(roomCode);
     }
   });
 
@@ -261,36 +222,29 @@ io.on('connection', (socket) => {
       const roomData = rooms.get(currentRoom);
       if (roomData) {
         if (roomData.admin === socket.id) {
-          // Admin disconnected
           io.to(currentRoom).emit('adminLoggedOut');
           cleanupRoom(currentRoom);
-        } else if (roomData.users.has(socket.id)) {
-          // User disconnected
+        } else {
           roomData.users.delete(socket.id);
-          if (userTimeouts.has(socket.id)) {
-            clearTimeout(userTimeouts.get(socket.id));
-            userTimeouts.delete(socket.id);
-          }
+          clearTimeout(userTimeouts.get(socket.id));
+          userTimeouts.delete(socket.id);
         }
       }
     }
   });
 
-  // Handle activity updates
   socket.on('userActivity', () => {
     if (currentRoom) {
       resetUserTimeout(socket.id, currentRoom);
     }
   });
 
-  // Handle errors
   socket.on('error', (error) => {
     console.error('Socket error:', error);
     socket.emit('error', 'An error occurred');
   });
 });
 
-// Periodic cleanup of old files (run every hour)
 setInterval(() => {
   fs.readdir(uploadDir, (err, files) => {
     if (err) {
@@ -307,7 +261,6 @@ setInterval(() => {
           return;
         }
 
-        // Remove files older than 24 hours
         if (now - stats.mtime.getTime() > 24 * 60 * 60 * 1000) {
           fs.unlink(filePath, err => {
             if (err) console.error(`Error deleting old file ${file}:`, err);
@@ -318,19 +271,12 @@ setInterval(() => {
   });
 }, 60 * 60 * 1000);
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Cleaning up...');
   
-  // Clean up all rooms
-  rooms.forEach((_, roomCode) => {
-    cleanupRoom(roomCode);
-  });
+  rooms.forEach((_, roomCode) => cleanupRoom(roomCode));
 
   server.close(() => {
     console.log('Server shutdown complete');
