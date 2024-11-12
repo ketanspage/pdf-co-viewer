@@ -104,7 +104,7 @@
       document.getElementById('userRole').textContent = role.charAt(0).toUpperCase() + role.slice(1);
 
       // Initialize Socket.IO
-      const socket = io('http://localhost:3000');
+      const socket = io('https://pdf-co-viewer.onrender.com');
       let pdfDoc = null;
       let pageNum = 1;
       let currentRoom = null;

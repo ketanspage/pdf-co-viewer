@@ -14,7 +14,7 @@ const io = new Server(server, {
   }
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, 'public', 'uploads');
